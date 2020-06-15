@@ -12,7 +12,7 @@ FEATURE_SIZE = 24.0
 def main():
     simplex = OpenSimplex()
 
-    print('Generating 2D image...')
+    print('Generating 2D image without arrays...')
     im = Image.new('L', (WIDTH, HEIGHT))
     k = 0
     t0 = time.time()

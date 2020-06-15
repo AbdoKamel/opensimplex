@@ -52,6 +52,10 @@ If it isn't provided the class will **default to use 0 as the seed**.
 
 > Generate 2D OpenSimplex noise from X,Y coordinates.
 
+*OpenSimplex.noise2d_array(x, y)*
+
+> Generate 2D OpenSimplex noise from X,Y coordinates where X and Y are arrays of coordinates. This is much faster than `OpenSimplex.noise2d(x, y)` for large images. Check [example/demo_noise2d_array.py](example/demo_noise2d_array.py) for a demo.
+
 *OpenSimplex.noise3d(x, y, z)*
 
 > Generate 3D OpenSimplex noise from X,Y,Z coordinates.
