@@ -4,7 +4,7 @@
 import sys
 from ctypes import c_int64
 from math import floor as _floor
-
+import numpy as np
 
 if sys.version_info[0] < 3:
     def floor(num):
@@ -113,6 +113,16 @@ class OpenSimplex(object):
 
         g1, g2 = GRADIENTS_2D[index:index + 2]
         return g1 * dx + g2 * dy
+
+    def _extrapolate2d_array(self, xsb, ysb, dx, dy, attn):
+        perm = np.asarray(self._perm)
+        index = perm[(perm[xsb & 0xFF] + ysb) & 0xFF] & 0x0E
+        GRADIENTS_2D_AS_ARRAY = np.asarray(GRADIENTS_2D)
+        g1 = GRADIENTS_2D_AS_ARRAY[index]
+        g2 = GRADIENTS_2D_AS_ARRAY[index + 1]
+        ex = g1 * dx + g2 * dy
+        ex[attn <= 0] = 0
+        return ex
 
     def _extrapolate3d(self, xsb, ysb, zsb, dx, dy, dz):
         perm = self._perm
@@ -234,6 +244,109 @@ class OpenSimplex(object):
         if attn_ext > 0:
             attn_ext *= attn_ext
             value += attn_ext * attn_ext * extrapolate(xsv_ext, ysv_ext, dx_ext, dy_ext)
+
+        return value / NORM_CONSTANT_2D
+
+    def noise2d_array(self, x, y):
+        """
+        Generate 2D OpenSimplex noise from X,Y coordinates.
+        """
+        # Place input coordinates onto grid.
+        stretch_offset = (x + y) * STRETCH_CONSTANT_2D
+        xs = x + stretch_offset
+        ys = y + stretch_offset
+
+        # Floor to get grid coordinates of rhombus (stretched square) super-cell origin.
+        xsb = np.floor(xs).astype('int')
+        ysb = np.floor(ys).astype('int')
+
+        # Skew out to get actual coordinates of rhombus origin. We'll need these later.
+        squish_offset = (xsb + ysb) * SQUISH_CONSTANT_2D
+        xb = xsb + squish_offset
+        yb = ysb + squish_offset
+
+        # Compute grid coordinates relative to rhombus origin.
+        xins = xs - xsb
+        yins = ys - ysb
+
+        # Sum those together to get a value that determines which region we're in.
+        in_sum = xins + yins
+
+        # Positions relative to origin point.
+        dx0 = x - xb
+        dy0 = y - yb
+
+        # value = 0
+        value = np.zeros(xsb.shape)
+
+        # Contribution (1,0)
+        dx1 = dx0 - 1 - SQUISH_CONSTANT_2D
+        dy1 = dy0 - 0 - SQUISH_CONSTANT_2D
+        attn1 = 2 - dx1 * dx1 - dy1 * dy1
+        extrapolate = self._extrapolate2d_array
+        ex = extrapolate(xsb + 1, ysb + 0, dx1, dy1, attn1)
+        value += (attn1 ** 4) * ex
+
+        # Contribution (0,1)
+        dx2 = dx0 - 0 - SQUISH_CONSTANT_2D
+        dy2 = dy0 - 1 - SQUISH_CONSTANT_2D
+        attn2 = 2 - dx2 * dx2 - dy2 * dy2
+        value += (attn2 ** 4) * extrapolate(xsb + 0, ysb + 1, dx2, dy2, attn2)
+
+        xsv_ext = xsb.copy()
+        ysv_ext = ysb.copy()
+        dx_ext = dx0.copy()
+        dy_ext = dy0.copy()
+
+        c1 = in_sum <= 1  # We're inside the triangle (2-Simplex) at (0,0)
+        if c1.any():
+            zins = 1 - in_sum
+            c2 = (zins > xins) | (zins > yins)
+            c3 = xins > yins
+
+            xsv_ext[c1 & c2 & c3] += 1
+            ysv_ext[c1 & c2 & c3] -= 1
+            dx_ext[c1 & c2 & c3] -= 1
+            dy_ext[c1 & c2 & c3] += 1
+
+            xsv_ext[c1 & c2 & ~c3] -= 1
+            ysv_ext[c1 & c2 & ~c3] += 1
+            dx_ext[c1 & c2 & ~c3] += 1
+            dy_ext[c1 & c2 & ~c3] -= 1
+
+            xsv_ext[c1 & ~c2] += 1
+            ysv_ext[c1 & ~c2] += 1
+            dx_ext[c1 & ~ c2] -= (1 + 2 * SQUISH_CONSTANT_2D)
+            dy_ext[c1 & ~ c2] -= (1 + 2 * SQUISH_CONSTANT_2D)
+
+        not_c1 = ~c1
+        if not_c1.any():  # We're inside the triangle (2-Simplex) at (1,1)
+            zins = 2 - in_sum
+            c2 = (zins < xins) | (zins < yins)
+            c3 = xins > yins
+
+            xsv_ext[not_c1 & c2 & c3] += 2
+            # ysv_ext[not_c1 & c2 & c3] +=  0
+            dx_ext[not_c1 & c2 & c3] -= (2 + 2 * SQUISH_CONSTANT_2D)
+            dy_ext[not_c1 & c2 & c3] -= (0 + 2 * SQUISH_CONSTANT_2D)
+
+            # xsv_ext[not_c1 & c2 & ~c3] += 0
+            ysv_ext[not_c1 & c2 & ~c3] += 2
+            dx_ext[not_c1 & c2 & ~c3] -= (0 + 2 * SQUISH_CONSTANT_2D)
+            dy_ext[not_c1 & c2 & ~c3] -= (2 + 2 * SQUISH_CONSTANT_2D)
+
+            xsb[not_c1] += 1
+            ysb[not_c1] += 1
+            dx0[not_c1] -= (1 + 2 * SQUISH_CONSTANT_2D)
+            dy0[not_c1] -= (1 + 2 * SQUISH_CONSTANT_2D)
+
+        # Contribution (0,0) or (1,1)
+        attn0 = 2 - dx0 * dx0 - dy0 * dy0
+        value += (attn0 ** 4) * extrapolate(xsb, ysb, dx0, dy0, attn0)
+
+        # Extra Vertex
+        attn_ext = 2 - dx_ext * dx_ext - dy_ext * dy_ext
+        value += (attn_ext ** 4) * extrapolate(xsv_ext, ysv_ext, dx_ext, dy_ext, attn_ext)
 
         return value / NORM_CONSTANT_2D
 
