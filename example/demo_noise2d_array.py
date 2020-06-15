@@ -14,13 +14,11 @@ def main():
 
     print('Generating 2D image without arrays...')
     im = Image.new('L', (WIDTH, HEIGHT))
-    k = 0
     t0 = time.time()
     for y in range(0, HEIGHT):
         for x in range(0, WIDTH):
             value = simplex.noise2d(x / FEATURE_SIZE, y / FEATURE_SIZE)
             color = int((value + 1) * 128)
-            k += 1
             im.putpixel((x, y), color)
     t1 = time.time() - t0
     print("Time = {:.2f} sec.".format(t1))
