@@ -350,6 +350,18 @@ class OpenSimplex(object):
 
         return value / NORM_CONSTANT_2D
 
+    def noise2d_image(self, height, width, feature_size):
+        """
+        Generate 2D OpenSimplex noisy image with specified width, height, and feature size.
+        """
+        y_2d, x_2d = np.mgrid[0:height, 0:width]
+        y_lin = y_2d.flatten()
+        x_lin = x_2d.flatten()
+        values = self.noise2d_array(x_lin / feature_size, y_lin / feature_size)
+        values = ((values + 1) * 128).astype(np.uint8)
+        image = np.reshape(values, (height, width))
+        return image
+
     def noise3d(self, x, y, z):
         """
         Generate 3D OpenSimplex noise from X,Y,Z coordinates.

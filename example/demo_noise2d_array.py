@@ -38,9 +38,21 @@ def main():
     print("Time = {:.2f} sec.".format(t2))
     im_a.save('noise2d_using_arrays.png')
 
+    print('Generating 2D image...')
+    t0 = time.time()
+    image_b = simplex.noise2d_image(HEIGHT, WIDTH, FEATURE_SIZE)
+    t3 = time.time() - t0
+    print("Time = {:.2f} sec.".format(t3))
+    im_b = Image.new('L', (WIDTH, HEIGHT))
+    im_b.putdata(np.reshape(image_b, (HEIGHT * WIDTH,)))
+    im_b.save('noise2d_image.png')
+
     # check if both 2D images match
     err = np.mean(np.abs(np.array(im) - np.array(im_a)))
-    print("Error between both 2D images = {}".format(err))
+    print("Error between first and second image = {}".format(err))
+
+    err = np.mean(np.abs(np.array(im) - np.array(im_b)))
+    print("Error between first and third = {}".format(err))
 
 
 if __name__ == '__main__':
